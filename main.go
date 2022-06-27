@@ -89,11 +89,34 @@ func rows_sheets(context *cli.Context) error {
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.SetAutoMergeCells(true)
+	//table.SetRowLine(true)
 	// Получить все строки в листе
 	rows, err := f.Rows(context.String("sheet"))
 	if err != nil {
 		return err
 	}
+
+	var header []string
+	var tab []string
+	cols, err := f.Cols(context.String("sheet"))
+	if err != nil {
+		return err
+	}
+	for cols.Next() {
+		_, err := cols.Rows()
+		if err != nil {
+			fmt.Println(err)
+		}
+		header = append(header, " ")
+		//for _, _ = range col {
+		//fmt.Print(rowCell, "\t")
+		//}
+		//fmt.Println()
+	}
+
+	//table.SetHeader(header)
+
 	for rows.Next() {
 		row, err := rows.Columns()
 		if err != nil {
@@ -101,6 +124,9 @@ func rows_sheets(context *cli.Context) error {
 		}
 		var rowCells []string
 		for _, colCell := range row {
+			if colCell == "" {
+				rowCells = append(rowCells, "-")
+			}
 			rowCells = append(rowCells, colCell)
 		}
 		table.Append(rowCells)
