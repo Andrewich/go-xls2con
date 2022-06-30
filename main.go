@@ -1,10 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"encoding/csv"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
@@ -41,6 +42,8 @@ func main() {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "file", Required: true, Aliases: []string{"f"}},
 					&cli.StringFlag{Name: "sheet", Required: true, Aliases: []string{"s"}},
+					&cli.StringFlag{Name: "header", Usage: "Добавить заголовок в формете (1,2,3,...) (необязательно)", Value: "", Aliases: []string{"t"}},
+					&cli.StringFlag{Name: "output", Usage: "Формат вывода", Value: "tbl", Aliases: []string{"o"}},
 				},
 			},
 		},
@@ -75,6 +78,12 @@ func lists_sheets(context *cli.Context) error {
 	return nil
 }
 
+func normalize_row(row *[]string, count_cols int) {
+	for i := len(*row); i < count_cols; i++ {
+		*row = append(*row, "")
+	}
+}
+
 func rows_sheets(context *cli.Context) error {
 	f, err := excelize.OpenFile(context.String("file"))
 	if err != nil {
@@ -87,55 +96,53 @@ func rows_sheets(context *cli.Context) error {
 		}
 	}()
 
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-	table.SetAutoMergeCells(true)
-	//table.SetRowLine(true)
-	// Получить все строки в листе
-	rows, err := f.Rows(context.String("sheet"))
+	// Получить все столбцы в листе
+	cols, err := f.GetCols(context.String("sheet"))
 	if err != nil {
 		return err
+	}
+	max_count_cols := len(cols)
+
+	// Получить все строки в листе
+	rows, err := f.GetRows(context.String("sheet"))
+	if err != nil {
+		return err
+	}
+
+	// Привести все строки к одному размеру
+	var normolized_rows [][]string
+	for _, row := range rows {
+		normalize_row(&row, max_count_cols)
+		normolized_rows = append(normolized_rows, row)
 	}
 
 	var header []string
-	var tab []string
-	cols, err := f.Cols(context.String("sheet"))
-	if err != nil {
-		return err
-	}
-	for cols.Next() {
-		_, err := cols.Rows()
-		if err != nil {
-			fmt.Println(err)
-		}
-		header = append(header, " ")
-		//for _, _ = range col {
-		//fmt.Print(rowCell, "\t")
-		//}
-		//fmt.Println()
+	if context.String("header") != "" {
+		header = strings.Split(context.String("header"), ",")
 	}
 
-	//table.SetHeader(header)
+	if context.String("output") == "csv" {
+		wr := csv.NewWriter(os.Stdout)
 
-	for rows.Next() {
-		row, err := rows.Columns()
-		if err != nil {
-			fmt.Println(err)
+		if context.String("header") != "" {
+			wr.Write(header)
 		}
-		var rowCells []string
-		for _, colCell := range row {
-			if colCell == "" {
-				rowCells = append(rowCells, "-")
-			}
-			rowCells = append(rowCells, colCell)
-		}
-		table.Append(rowCells)
-	}
-	if err = rows.Close(); err != nil {
-		return err
-	}
 
-	table.Render()
+		for _, row := range normolized_rows {
+			wr.Write(row)
+		}
+		wr.Flush()
+	} else {
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.SetAutoMergeCells(true)
+		//table.SetRowLine(true)
+		if context.String("header") != "" {
+			table.SetHeader(header)
+		}
+		table.AppendBulk(normolized_rows)
+		table.Render()
+	}
 
 	return nil
 }
